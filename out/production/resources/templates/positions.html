@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html xmlns:th=http://www.thymeleaf.org>
+<head>
+    <meta charset=utf-8>
+    <meta name=viewport content="width=device-width,initial-scale=1">
+    <title>vue-multiple-page</title>
+    <link rel="stylesheet" href="/css/mini-dark.css">
+
+</head>
+<body>
+
+
+
+<div id="vue" class="container">
+    <header class="sticky">
+        <div class="col-sm col-lg-10 col-lg-offset-1">
+            <!--a href="#" role="button">Home</a>
+            <a href="#" role="button">About</a>
+            <a href="#" role="button">Contact</a-->
+            <input type="reset" class="primary" value="New Position" @click="newPosition">
+
+            <div class="input-group vertical">
+                <input type="checkbox" id="draggable" tabindex="0" v-model="draggable">
+                <label for="draggable" class="switch">Draggable</label>
+                <input type="checkbox" id="resizable" tabindex="0" v-model="resizable">
+                <label for="resizable" class="switch">Resizable</label>
+            </div>
+        </div>
+    </header>
+    <br />
+
+
+    <div class="row cols-sm-12 cols-lg-10">
+        <div class="col-lg-offset-1 row" style="-webkit-justify-content: space-around; justify-content: space-around;">
+
+        <grid-layout :layout="gridLayout"
+                     :col-num="12"
+                     :row-height="30"
+                     :is-draggable="draggable"
+                     :is-resizable="resizable"
+                     :vertical-compact="true"
+                     :use-css-transforms="true">
+            <grid-item v-for="(item, index)  in gridLayout"
+                       :x="item.x"
+                       :y="item.y"
+                       :w="item.w"
+                       :h="item.h"
+                       :i="item.i">
+
+                <div class="card">
+                    <h3 class="section double-padded center-text"><strong>{{positions[index].tradeCurrency}}{{positions[index].baseCurrency}}</strong>: <em>{{positions[index].quantity}}</em></h3>
+                    <div class="ct-chart ct-perfect-fourth center-text section" :class="[positions[index].id]">
+                        <div class="spinner-donut large center-text centered" v-if="positions[index].history.length < 2"></div>
+                    </div>
+                    <h3 class="section center-text">{{positions[index].state}}</h3>
+                    <div class="row">
+                        <div class="col-sm-4 center-text">
+                            <b> Stop Loss</b>
+                            <div class="odometer"> {{positions[index].stopLossPrice}}</div>
+                        </div>
+                        <div class="col-sm-4 center-text">
+                            <b> Current Price</b>
+                            <div class="odometer"> {{positions[index].history[positions[index].history.length-1]}}</div>
+                        </div>
+                        <div class="col-sm-4 center-text">
+                            <b> Sell Price</b>
+                            <div class="odometer"> {{positions[index].sellPrice}}</div>
+                        </div>
+                    </div>
+                    <input type="reset" class="primary" value="Edit" @click="editPositionModal(positions[index])">
+                    <input type="reset" class="secondary" value="Panic Sell!!" @click="panicSell(positions[index])">
+                </div>
+            </grid-item>
+        </grid-layout>
+        </div>
+
+            <modal v-if="showModal" @close="showModal = false">
+                <h3 slot="header">{{modalText.title}} Position</h3>
+                <slot slot="body">
+                    <form>
+                        <fieldset>
+                            <legend>Configuration</legend>
+                            <div class="row section">
+                                <div class="col-sm-6 center-text">
+                                    <div class="input-group vertical">
+                                        <label for="tradeCurrency">Trade Currency</label>
+                                        <input id="tradeCurrency" placeholder="ETH" v-model="modalPosition.tradeCurrency">
+                                    </div>
+                                </div>
+                                <div class="col-sm-6 center-text">
+                                    <div class="input-group vertical">
+                                        <label for="baseCurrency">Base Currency</label>
+                                        <input id="baseCurrency" placeholder="BTC" v-model="modalPosition.baseCurrency">
+                                    </div>
+                                </div>
+                            </div>
+                            <hr class="style8">
+                            <div class="row section dark">
+                                <div class="col-sm-6 center-text">
+                                    <div class="input-group vertical">
+                                        <input type="checkbox" id="usepercentage" tabindex="0" v-model="usePercentage" @change="toggleUsePercentage">
+                                        <label for="usepercentage" class="switch">Use Percentage</label>
+                                    </div>
+                                </div>
+                                <div class="col-sm-6 center-text">
+                                    <div class="input-group vertical" v-if="modalPosition.percentage != null">
+                                        <input type="checkbox" id="ponbuy" tabindex="1" v-model="modalPosition.percentageOnBuy">
+                                        <label for="ponbuy" class="switch">Calculate on buy</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <hr class="style8">
+                            <div class="row section darker">
+                                <div class="col-sm-6 center-text">
+                                    <div class="input-group vertical" v-if="!usePercentage">
+                                        <label for="quantity">Quantity</label>
+                                        <input type="number" id="quantity"  v-model="modalPosition.quantity" step="0.000000001">
+                                    </div>
+                                    <div class="input-group vertical" v-if="usePercentage">
+                                        <label for="percentage">Percentage</label>
+                                        <input type="number" id="percentage"  v-model="modalPosition.percentage" step="0.000000001">
+                                    </div>
+                                </div>
+                                <div class="col-sm-6 center-text">
+                                    <div class="input-group vertical">
+                                        <label for="tradeCurrency">Initial State</label>
+                                        <select v-model="modalPosition.state">
+                                            <option value="PAUSED">PAUSED</option>
+                                            <option value="NOTTAKEN">NOTTAKEN</option>
+                                            <option value="TAKEN">TAKEN</option>
+                                            <option value="PROFITTAKEN">PROFITTAKEN</option>
+                                            <option value="STOPLOSS">STOPLOSS</option>
+                                            <option value="SOLDBYOTHER">SOLDBYOTHER</option>
+                                            <option value="PANICSELL">PANICSELL</option>
+                                            <option value="CANTBUY">CANTBUY</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <hr class="style8">
+                            <div class="row">
+                                <div class="col-sm-4 center-text">
+                                    <div class="input-group vertical">
+                                        <label for="buyPrice">Buy Price</label>
+                                        <input type="number" id="buyPrice"  v-model="modalPosition.buyPrice" step="0.000000001">
+                                    </div>
+                                </div>
+                                <div class="col-sm-4 center-text">
+                                    <div class="input-group vertical">
+                                        <label for="sellPrice">Sell Price</label>
+                                        <input type="number" id="sellPrice"  v-model="modalPosition.sellPrice" step="0.000000001">
+                                    </div>
+                                </div>
+                                <div class="col-sm-4 center-text">
+                                    <div class="input-group vertical">
+                                        <label for="stopLossPrice">StopLoss Price</label>
+                                        <input type="number" id="stopLossPrice"  v-model="modalPosition.stopLossPrice" step="0.000000001">
+                                    </div>
+                                </div><div class="col-sm-4 center-text">
+                            </div>
+                            </div>
+
+                        </fieldset>
+                    </form>
+                </slot>
+
+                <div slot="footer">
+                    <button class="modal-default-button modal-button" @click="showModal = false">
+                        Close
+                    </button>
+                    <button class="modal-default-button modal-button secondary" v-if="modalText.title === 'Edit'" @click="removePosition()">
+                        Remove
+                    </button>
+                    <button class="modal-default-button modal-button primary" @click="saveOrEdit()">
+                        {{modalText.saveButton}}
+                    </button>
+                </div>
+            </modal>
+
+        </div>
+
+</div>
+
+</div>
+<footer>
+    <div class="col-sm col-lg-10 col-lg-offset-1">
+        <p>Copyright &copy; JLabarca 2018 | Built using <a href="https://chalarangelo.github.io/mini.css/">mini.css</a>
+        </p>
+    </div>
+</footer>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<link rel="stylesheet" href="//cdn.jsdelivr.net/chartist.js/latest/chartist.min.css">
+<script src="//cdn.jsdelivr.net/chartist.js/latest/chartist.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@2.5.16/dist/vue.js"></script>
+<script src="https://unpkg.com/sweetalert2@7.19.1/dist/sweetalert2.all.js"></script>
+<script src="/js/vue-grid-layout.min.js"></script>
+<script src="/js/odometer.js"></script>
+<link rel="stylesheet" href="/css/odometer-default.css">
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    Vue.component('modal', {
+        template: '#modal-template'
+    })
+    var GridLayout = VueGridLayout.GridLayout;
+    var GridItem = VueGridLayout.GridItem;
+    var vm = new Vue({
+        el: '#vue',
+        components: {
+            "GridLayout": GridLayout,
+            "GridItem": GridItem
+        },
+        data: {
+            modalPosition: {
+                "tradeCurrency":"ONT",
+                "baseCurrency":"BTC",
+                "quantity":null,
+                "percentage":100,
+                "buyPrice":0.00055966,
+                "sellPrice":0.00056566,
+                "stopLossPrice":0.00055766,
+                "positionSetTime":null,
+                "sellTime":null,
+                "history":[],
+                "state":"NOTTAKEN",
+                "realBuyPrice":null,
+                "realSellPrice":null,
+                "percentageOnBuy":true
+            },
+            positions: [],
+            loading: true,
+            showModal: false,
+            usePercentage: false,
+            modalText: {
+                title: 'New',
+                saveButton: 'Add'
+            },
+            gridLayout: [],
+            draggable: true,
+            resizable: true
+        },
+        methods: {
+            toggleUsePercentage: function(val){
+                if(this.usePercentage){
+                    this.modalPosition.quantity = null
+                    this.modalPosition.percentage = 100
+                } else {
+                    this.modalPosition.quantity = 1
+                    this.modalPosition.percentage = null
+                }
+            },
+            newPosition: function(){
+                this.modalText.title = "New"
+                this.modalText.saveButton = "Add"
+                this.usePercentage = false
+                this.showModal = true
+                this.modalPosition.id = null
+            },
+            fillArray: function(value, len) {
+                if (len == 0) return [];
+                var a = [value];
+                while (a.length * 2 <= len) a = a.concat(a);
+                if (a.length < len) a = a.concat(a.slice(0, len - a.length));
+                return a;
+            },
+            editPositionModal: function(pos){
+                this.modalText.title = "Edit"
+                this.modalText.saveButton = "Save"
+                this.modalPosition = pos
+                this.showModal = true
+            },
+            saveOrEdit: function() {
+                this.showModal = false
+                if(this.modalText.title === 'New')
+                    this.addPosition()
+                else
+                    this.editPosition()
+            },
+            addPosition: function(){
+                axios.post('/addPosition', this.modalPosition)
+                    .then( (response) => {
+                        console.log(response)
+                        swal({
+                            title: 'Added!',
+                            text: 'Position has been successfully added',
+                            type: 'success',
+                            confirmButtonText: 'Ok'
+                        })
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                        swal({
+                            title: 'Error!',
+                            text: 'Error adding the position',
+                            type: 'error',
+                            confirmButtonText: 'Fuck'
+                        })
+                    })
+            },
+            editPosition: function(){
+                axios.post('/editPosition', this.modalPosition)
+                    .then( (response) => {
+                        console.log(response)
+                        swal({
+                            title: 'Edited!',
+                            text: 'Position has been successfully edited',
+                            type: 'success',
+                            confirmButtonText: 'Ok'
+                        })
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                        swal({
+                            title: 'Error!',
+                            text: 'Error editing the position',
+                            type: 'error',
+                            confirmButtonText: 'Fuck'
+                        })
+                    })
+            },
+            removePosition: function(){
+                axios.post('/removePosition', this.modalPosition)
+                    .then( (response) => {
+                        console.log(response)
+                        this.showModal = false
+                        swal({
+                            title: 'Edited!',
+                            text: 'Position has been successfully removed',
+                            type: 'success',
+                            confirmButtonText: 'Ok'
+                        })
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                        swal({
+                            title: 'Error!',
+                            text: 'Error removing the position',
+                            type: 'error',
+                            confirmButtonText: 'Fuck'
+                        })
+                    })
+            },
+            getPositions: function () {
+                axios.get('/getPositions')
+                    .then( (response) => {
+                        this.positions = response.data
+                        setTimeout( () => {
+                            for(let pos of this.positions) {
+                                if(pos.history.length > 2) {
+                                    let sellPrice = pos.sellPrice;
+                                    let buyPrice = pos.buyPrice;
+                                    let stopLoss = pos.stopLossPrice;
+
+                                    var data = {
+                                        series: [pos.history,
+                                            this.fillArray(stopLoss,pos.history.length), //stopLoss line
+                                            this.fillArray(sellPrice,pos.history.length), //sellPrice line
+                                            this.fillArray(buyPrice,pos.history.length) //buyPrice line
+                                        ]
+                                    };
+                                    new Chartist.Line('.'+pos.id, data,
+                                        {
+                                            //low: stopLoss,
+                                            //high: sellPrice,
+                                            showArea: false,
+                                            showLine: true,
+                                            showPoint: false,
+                                            fullWidth: true,
+                                            axisX: {
+                                                offset: 10,
+                                                showGrid: false
+                                            },
+                                            axisY: {
+                                                showGrid: true
+                                            }
+                                            /*plugins: [
+                                                Chartist.plugins.ctGoalLine({
+                                                    value: pos.history[0]*1.2
+                                                }),
+                                                Chartist.plugins.ctTargetLine({
+                                                    value: pos.history[0]*0.8
+                                                })
+                                            ]*/
+                                        }
+                                    );
+                                }
+                                this.updateGrid(pos)
+                            }
+
+                        }, 1000);
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                    })
+            },
+            panicSell: function (pos) {
+                axios.post('/panicSell', pos)
+                    .then( (response) => {
+                        console.log(response);
+                        swal({
+                            title: 'Sold!',
+                            text: 'This positions was sold at',
+                            type: 'success',
+                            confirmButtonText: 'Ok'
+                        })
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                        swal({
+                            title: 'Error!',
+                            text: 'Error on panic sell',
+                            type: 'error',
+                            confirmButtonText: 'Fuck'
+                        })
+                    })
+            },
+            removeItem: function(item) {
+                console.log("### REMOVE ");
+                console.log(item);
+                this.gridLayout.splice(this.gridLayout.indexOf(item), 1);
+            },
+            updateGrid: function() {
+                console.log(this.gridLayout)
+                for(let pos in this.positions) {
+                    let it = this.gridLayout.find(item=>{return item.i === pos.id})
+                    if(it === null)
+                        this.gridLayout.push({"x":5,"y":5,"w":6,"h":10,"i":pos.id});
+
+                }
+            }
+        },
+        computed: {
+            getPosition: function (id) {
+                return this.positions.find(pos => {return pos.id === id})
+            }
+        },
+        created: function () {
+            this.getPositions()
+            setInterval(() => {
+                this.getPositions()
+            }, 2000);
+        }
+    })
+/*]]>*/
+</script>
+
+<script type="text/x-template" id="modal-template">
+    <transition name="modal">
+        <div class="modal-mask">
+            <div class="modal-wrapper">
+                <div class="modal-container">
+
+                    <div class="modal-header">
+                        <slot name="header">
+                        </slot>
+                    </div>
+
+                    <div class="modal-body">
+                        <slot name="body">
+                        </slot>
+                    </div>
+
+                    <div class="modal-footer">
+                        <slot name="footer">
+                            <button class="modal-default-button modal-button" @click="$emit('close')">
+                                OK
+                            </button>
+                        </slot>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </transition>
+</script>
+
+<!-- app -->
+<div id="app">
+
+</div>
+</body>
+</html>
+
+<style>
+    .price{
+        font-family: Consolas,monaco,monospace;
+        font-size: 15px;
+        font-style: oblique;
+        font-weight: 500;
+    }
+    .ct-target-line {
+        stroke: blue;
+        stroke-width: 2px;
+        stroke-dasharray: 4px;
+        shape-rendering: crispEdges;
+    }
+    .centered{
+       margin: auto;
+    }
+    .center-text{
+        text-align: center;
+    }
+    .ct-series-a .ct-bar, .ct-series-a .ct-line, .ct-series-a .ct-point, .ct-series-a .ct-slice-donut {
+        stroke: #d4f9de;
+    }
+
+    .ct-series-b .ct-bar, .ct-series-b .ct-line, .ct-series-b .ct-point, .ct-series-b .ct-slice-donut {
+        stroke: #ff6f69;
+    }
+    .ct-series-c .ct-bar, .ct-series-c .ct-line, .ct-series-c .ct-point, .ct-series-c .ct-slice-donut {
+        stroke: #88d8b0;
+    }
+    .ct-series-d .ct-bar, .ct-series-d .ct-line, .ct-series-d .ct-point, .ct-series-d .ct-slice-donut {
+        stroke: #ffcc5c;
+    }
+     .ct-series-a .ct-line{
+         stroke: #e7e9ea;
+         fill:none;
+         stroke-width:4px;
+         stroke-dasharray:5px;
+         -webkit-animation:dashoffset 1s linear infinite;
+         -moz-animation:dashoffset 1s linear infinite;
+         -o-animation:dashoffset 1s linear infinite;
+         animation:dashoffset 1s linear infinite
+     }
+    .ct-label.ct-vertical.ct-start {
+        font-size: 7px;
+        font-weight: 600;
+        color: white;
+    }
+     @-webkit-keyframes dashoffset{
+         0%{
+             stroke-dashoffset:0
+         }
+         100%{
+             stroke-dashoffset:-20px
+         }
+     }
+     @-moz-keyframes dashoffset{
+         0%{
+             stroke-dashoffset:0
+         }
+         100%{
+             stroke-dashoffset:-20px
+         }
+     }
+     @-ms-keyframes dashoffset{
+         0%{
+             stroke-dashoffset:0
+         }
+         100%{
+             stroke-dashoffset:-20px
+         }
+     }
+     @keyframes dashoffset{
+         0%{
+             stroke-dashoffset:0
+         }
+         100%{
+             stroke-dashoffset:-20px
+         }
+     }
+     @-webkit-keyframes bouncing-stroke{
+         0%,100%{
+             stroke-width:5px
+         }
+         50%{
+             stroke-width:10px
+         }
+     }
+     @-moz-keyframes bouncing-stroke{
+         0%,100%{
+             stroke-width:5px
+         }
+         50%{
+             stroke-width:10px
+         }
+     }
+     @-ms-keyframes bouncing-stroke{
+         0%,100%{
+             stroke-width:5px
+         }
+         50%{
+             stroke-width:10px
+         }
+     }
+     @keyframes bouncing-stroke{
+         0%,100%{
+             stroke-width:5px
+         }
+         50%{
+             stroke-width:10px
+         }
+     }
+     @-webkit-keyframes exploding-stroke{
+         0%{
+             stroke-width:2px;
+             opacity:1
+         }
+         100%{
+             stroke-width:20px;
+             opacity:0
+         }
+     }
+     @-moz-keyframes exploding-stroke{
+         0%{
+             stroke-width:2px;
+             opacity:1
+         }
+         100%{
+             stroke-width:20px;
+             opacity:0
+         }
+     }
+     @-ms-keyframes exploding-stroke{
+         0%{
+             stroke-width:2px;
+             opacity:1
+         }
+         100%{
+             stroke-width:20px;
+             opacity:0
+         }
+     }
+     @keyframes exploding-stroke{
+         0%{
+             stroke-width:2px;
+             opacity:1
+         }
+         100%{
+             stroke-width:20px;
+             opacity:0
+         }
+     }
+
+    .modal-mask {
+        position: fixed;
+        z-index: 9998;
+        top: 0;
+        left: 0;
+        width: 100%;
+        max-width: 100% !important;
+        height: 100%;
+        background-color: rgba(0, 0, 0, .5);
+        display: table;
+        transition: opacity .3s ease;
+    }
+
+    .modal-wrapper {
+        display: table-cell;
+        vertical-align: middle;
+    }
+
+    .modal-container {
+        max-width: 500px;
+        margin: 0px auto;
+        padding: 40px 30px;
+        background-color: #1c2529;
+        border-radius: 2px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .33);
+        transition: all .3s ease;
+        font-family: Helvetica, Arial, sans-serif;
+    }
+
+    .modal-header h3 {
+        margin-top: 0;
+        color: #42b983;
+    }
+
+    .modal-body {
+        margin: 20px 0;
+    }
+
+    .modal-default-button {
+        float: right;
+    }
+
+    /*
+     * The following styles are auto-applied to elements with
+     * transition="modal" when their visibility is toggled
+     * by Vue.js.
+     *
+     * You can easily play with the modal transition by editing
+     * these styles.
+     */
+
+    .modal-enter {
+        opacity: 0;
+    }
+
+    .modal-leave-active {
+        opacity: 0;
+    }
+
+    .modal-enter .modal-container,
+    .modal-leave-active .modal-container {
+        -webkit-transform: scale(1.1);
+        transform: scale(1.1);
+    }
+
+    fieldset {
+        border: .0625rem solid #d0d0d0;
+        border-radius: .125rem;
+        margin: .125rem;
+        padding: 0.5rem;
+        max-height: 356px;
+        overflow-y: scroll;
+    }
+
+    .input-group [type="checkbox"]+label, .input-group [type="radio"]+label {
+        position: relative;
+        display: inline-block;
+        margin-left: 3.25rem;
+        cursor: pointer;
+    }
+
+    .modal-button{
+        margin: -0.5rem;
+        margin-left: 15px;
+    }
+    hr.style8 {
+        border-top: 1px solid #8c8b8b;
+        border-bottom: 1px solid #fff;
+    }
+
+    .input-group label {
+        font-size: 10px;
+        font-family: unset;
+    }
+    .ct-perfect-fourth {
+        display: block;
+        position: relative;
+        width: 100%;
+        background: #3C3C3C;
+    }
+
+    html {
+        scrollbar-face-color: #646464;
+        scrollbar-base-color: #646464;
+        scrollbar-3dlight-color: #646464;
+        scrollbar-highlight-color: #646464;
+        scrollbar-track-color: #000;
+        scrollbar-arrow-color: #000;
+        scrollbar-shadow-color: #646464;
+        scrollbar-dark-shadow-color: #646464;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 3px;}
+    ::-webkit-scrollbar-button {  background-color: #666; }
+    ::-webkit-scrollbar-track {  background-color: #646464;}
+    ::-webkit-scrollbar-track-piece { background-color: #000;}
+    ::-webkit-scrollbar-thumb { height: 50px; background-color: #666; border-radius: 3px;}
+    ::-webkit-scrollbar-corner { background-color: #646464;}
+    ::-webkit-resizer { background-color: #666;}
+</style>
